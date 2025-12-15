@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spider Rush</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CSS for the Jungle / Spider Web Theme */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start; /* Keep elements at the top by default */
+            min-height: 100vh;
+            /* Jungle Background */
+            background-image: url('https://i.imgur.com/fMZhwsl.png');
+            background-size: contain; /* Scale image to fit the window, centered */
+            background-position: center;
+            background-repeat: no-repeat; /* Crucial for alignment */
+            background-attachment: fixed;
+            background-color: #0d281a; 
+            padding: 20px 0;
+            position: relative; /* Positioning context for #game-container */
+        }
+        
+        .game-title {
+            color: #fde047; /* Bright yellow for contrast */
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        #game-container {
+            /* Precise alignment over the background image circle (1024x1024) */
+            position: absolute; 
+            
+            /* Calculated size (581px / 1024px = 56.73% of the 1024x1024 image) in vmin */
+            width: 58vmin; 
+            max-width: 58vmin;
+            aspect-ratio: 1 / 1; 
+            
+            /* Initial centering of the container in the viewport */
+            top: 50%;
+            left: 50%;
+            
+            /* Offset from the center of the image (calculated on 1024x1024) */
+            transform: translate(calc(-50%), calc(-50% + 1vmin));
+            
+            background-color: transparent;
+            box-shadow: none; 
+            border-radius: 50%; 
+            /* Game CSS border (8px) - The internal node radius is adjusted for this */
+            border: 8px solid rgba(243, 244, 246, 0.7); 
+            
+            overflow: hidden;
+            touch-action: none; 
+            z-index: 10; /* Placed above background controls */
+        }
+        
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Node Styles (small stones or insects) */
+        .node {
+            position: absolute;
+            border-radius: 50%;
+            /* Dark, matte color */
+            background-color: #44403c; 
+            /* Light border for contrast */
+            border: 3px solid #f3f4f6; 
+            cursor: grab;
+            transition: transform 0.1s; 
+            z-index: 20; /* Above the canvas */
+        }
+        .node:active {
+            cursor: grabbing;
+        }
+        .node.dragging {
+            box-shadow: 0 0 18px rgba(255, 255, 255, 0.9);
+            transform: scale(1.25);
+        }
+        
+        /* Victory Message */
+        #victory-message {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); 
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%; 
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            z-index: 30;
+        }
+        #victory-message.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="text-3xl font-bold mb-6 game-title">Spider Rush</h1>
+
+    <!-- 
+        Spacer to maintain document flow. 
+        Its size matches #game-container so controls stay at the bottom.
+    -->
+    <div style="width: 56.73vmin; height: 56.73vmin; max-width: 56.73vmin; margin-bottom: 2rem;"></div>
+
+    <div id="game-container">
+        <!-- Canvas where lines are drawn -->
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- Victory Message -->
+        <div id="victory-message">
+            <svg class="w-20 h-20 text-green-400 mb-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <p class="text-4xl font-extrabold mb-2">CONGRATULATIONS!</p>
+            <p class="text-xl">Web Untangled (0 intersections).</p>
+        </div>
+    </div>
+
+    <div class="mt-8 flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 items-center">
+        <!-- Game Controls -->
+        <div class="flex items-center space-x-2 bg-white p-3 rounded-xl shadow-md">
+            <label for="level-select" class="font-medium text-gray-700">Difficulty:</label>
+            <select id="level-select" class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                <!-- Options will be generated by the script -->
+            </select>
+        </div>
+        <button id="new-game-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition duration-150 ease-in-out transform hover:scale-105 w-full sm:w-auto">
+            New Game
+        </button>
+    </div>
+
+    <script>
+        // --- 1. DOM Elements and Constants ---
+        const canvas = document.getElementById('game-canvas');
+        const container = document.getElementById('game-container');
+        const ctx = canvas.getContext('2d');
+        const newGameBtn = document.getElementById('new-game-btn');
+        const victoryMessage = document.getElementById('victory-message');
+        const levelSelect = document.getElementById('level-select');
+        
+        // The container border is defined in CSS (#game-container border: 8px solid...)
+        const CONTAINER_BORDER_SIZE = 8; 
+
+        const DIFFICULTY_LEVELS = [6, 8, 10, 15, 20, 30, 50, 80, 100, 128]; 
+        let NODE_COUNT = DIFFICULTY_LEVELS[0]; 
+        
+        let nodes = [];
+        let edges = [];
+        let isDragging = false;
+        let activeNode = null; // Used for highlighting connected edges
+        let offsetX, offsetY;
+
+        // --- 2. Game Initialization ---
+
+        /**
+         * Initializes the level selection dropdown menu.
+         */
+        function setupLevelSelector() {
+            DIFFICULTY_LEVELS.forEach((count, index) => {
+                const option = document.createElement('option');
+                option.value = count;
+                option.textContent = `${count} Nodes (Level ${index + 1}/${DIFFICULTY_LEVELS.length})`;
+                levelSelect.appendChild(option);
+            });
+            levelSelect.value = DIFFICULTY_LEVELS[0]; 
+
+            levelSelect.addEventListener('change', () => {
+                NODE_COUNT = parseInt(levelSelect.value);
+            });
+        }
+        
+        /**
+         * Starts a new game.
+         */
+        function initGame() {
+            NODE_COUNT = parseInt(levelSelect.value);
+            
+            resizeCanvas(); 
+            generateLevel(NODE_COUNT); 
+            setupNodeElements(); 
+            checkIntersections(); 
+            
+            victoryMessage.classList.remove('active');
+        }
+
+        // --- 3. Level Generation and Setup ---
+
+        /**
+         * Generates level data (nodes and edges) by randomly positioning them on a circle.
+         * The radius is calculated to align with the inner edge of the container border.
+         * @param {number} count The number of nodes to generate.
+         */
+        function generateLevel(count) {
+            nodes = [];
+            edges = [];
+            
+            const W = canvas.width;
+            const H = canvas.height;
+            const center = { x: W / 2, y: H / 2 };
+            
+            // Calculate radius to match the inner edge of the container
+            const maxRadius = (Math.min(W, H) / 2) - CONTAINER_BORDER_SIZE;
+            const radius = maxRadius; 
+
+            // 1. Determine and shuffle angular positions
+            let angularPositions = [];
+            for (let i = 0; i < count; i++) {
+                angularPositions.push((i / count) * 2 * Math.PI); 
+            }
+            // Fisher-Yates shuffle
+            for (let i = angularPositions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [angularPositions[i], angularPositions[j]] = [angularPositions[j], angularPositions[i]];
+            }
+
+            // 2. Create nodes
+            for (let i = 0; i < count; i++) {
+                const angle = angularPositions[i]; 
+                nodes.push({
+                    id: i,
+                    x: center.x + radius * Math.cos(angle), 
+                    y: center.y + radius * Math.sin(angle),
+                    element: null, 
+                });
+            }
+
+            // 3. Create edges (Simple Cycle)
+            for (let i = 0; i < count; i++) {
+                edges.push({ start: i, end: (i + 1) % count });
+            }
+            // (Filtering duplicates is kept, although not strictly necessary for a simple cycle)
+            edges = edges.filter((edge, index, self) => 
+                index === self.findIndex((t) => 
+                    (t.start === edge.start && t.end === edge.end) || 
+                    (t.start === edge.end && t.end === edge.start)
+                ) && edge.start !== edge.end
+            );
+        }
+        
+        /**
+         * Creates and positions the DOM elements representing the nodes.
+         */
+        function setupNodeElements() {
+            // Clean up old nodes
+            container.querySelectorAll('.node').forEach(n => container.removeChild(n));
+
+            // Calculate node size based on total node count
+            const baseSize = 24;
+            const sizeFactor = Math.min(1, Math.max(0.4, 6 / NODE_COUNT)); 
+            const nodeSize = Math.max(8, baseSize * sizeFactor); 
+            const margin = nodeSize / 2; // DOM Radius
+            
+            // 3px is the CSS border of the .node
+            const nodeTotalMargin = margin + 3; 
+
+            nodes.forEach(node => {
+                const nodeElement = document.createElement('div');
+                nodeElement.className = 'node';
+                
+                nodeElement.style.width = `${nodeSize}px`;
+                nodeElement.style.height = `${nodeSize}px`;
+
+                // Positioning: remove margin + border to center the element at (x, y)
+                nodeElement.style.left = `${node.x - nodeTotalMargin}px`;
+                nodeElement.style.top = `${node.y - nodeTotalMargin}px`;
+                
+                nodeElement.dataset.id = node.id;
+                container.appendChild(nodeElement);
+                node.element = nodeElement; 
+            });
+        }
+
+        // --- 4. Graph Logic (Intersection Detection) ---
+        
+        /**
+         * Calculates the cross product to determine orientation.
+         */
+        function crossProduct(p1, p2, p3) {
+            return (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x);
+        }
+
+        /**
+         * Checks if a point p lies on the segment AB.
+         */
+        function onSegment(p, a, b) {
+            return (
+                p.x <= Math.max(a.x, b.x) && p.x >= Math.min(a.x, b.x) &&
+                p.y <= Math.max(a.y, b.y) && p.y >= Math.min(a.y, b.y)
+            );
+        }
+
+        /**
+         * Detects if segments (A, B) and (C, D) intersect.
+         */
+        function segmentsIntersect(a, b, c, d) {
+            const o1 = crossProduct(a, b, c);
+            const o2 = crossProduct(a, b, d);
+            const o3 = crossProduct(c, d, a);
+            const o4 = crossProduct(c, d, b);
+            
+            // General case (actual intersection)
+            if (((o1 > 0) !== (o2 > 0)) && ((o3 > 0) !== (o4 > 0))) {
+                return true;
+            }
+
+            // Collinear cases
+            if (o1 === 0 && onSegment(c, a, b)) return true;
+            if (o2 === 0 && onSegment(d, a, b)) return true;
+            if (o3 === 0 && onSegment(a, c, d)) return true;
+            if (o4 === 0 && onSegment(b, c, d)) return true;
+
+            return false;
+        }
+
+        /**
+         * Checks all intersections and updates the line display.
+         */
+        function checkIntersections() {
+            let intersectionCount = 0;
+            const W = canvas.width;
+            const H = canvas.height;
+            ctx.clearRect(0, 0, W, H);
+            
+            ctx.lineCap = 'round';
+            
+            let crossedEdgesIndices = new Set();
+
+            for (let i = 0; i < edges.length; i++) {
+                for (let j = i + 1; j < edges.length; j++) {
+                    const edge1 = edges[i];
+                    const edge2 = edges[j];
+                    
+                    const A = nodes[edge1.start];
+                    const B = nodes[edge1.end];
+                    const C = nodes[edge2.start];
+                    const D = nodes[edge2.end];
+                    
+                    // An edge cannot intersect itself or an adjacent edge.
+                    const isAdjacent = 
+                        (edge1.start === edge2.start || edge1.start === edge2.end ||
+                         edge1.end === edge2.start || edge1.end === edge2.end);
+                    
+                    if (!isAdjacent) {
+                        if (segmentsIntersect(A, B, C, D)) {
+                            crossedEdgesIndices.add(i);
+                            crossedEdgesIndices.add(j);
+                            intersectionCount++;
+                        }
+                    }
+                }
+            }
+            
+            // Draw edges with conditional color
+            edges.forEach((edge, index) => {
+                const A = nodes[edge.start];
+                const B = nodes[edge.end];
+                
+                ctx.beginPath();
+                ctx.moveTo(A.x, A.y);
+                ctx.lineTo(B.x, B.y);
+                
+                let strokeColor = '#F3F4F6'; // Default (un-crossed, light gray/white)
+                let lineWidth = 2.5;
+
+                // 1. Intersection detection
+                if (crossedEdgesIndices.has(index)) {
+                    strokeColor = '#B91C1C'; // Red if crossed
+                }
+
+                // 2. Active node highlight (overrides crossed color)
+                if (activeNode) {
+                    const activeNodeId = activeNode.id;
+                    if (edge.start === activeNodeId || edge.end === activeNodeId) {
+                        strokeColor = '#a3e635'; // Lime green for highlight
+                        lineWidth = 4.5;
+                    }
+                }
+                
+                ctx.lineWidth = lineWidth;
+                ctx.strokeStyle = strokeColor; 
+                ctx.stroke();
+            });
+            
+            // Update victory state
+            if (intersectionCount === 0) {
+                victoryMessage.classList.add('active');
+            } else {
+                victoryMessage.classList.remove('active');
+            }
+        }
+        
+        // --- 5. Interactivity and Responsiveness Management ---
+        
+        /**
+         * Resizes the canvas and proportionally adapts node positions.
+         */
+        function resizeCanvas() {
+            const oldWidth = canvas.width;
+            const oldHeight = canvas.height;
+            
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            
+            const W = canvas.width;
+            const H = canvas.height;
+            
+            // Recalculate max radius for constraint
+            const maxRadius = (Math.min(W, H) / 2) - CONTAINER_BORDER_SIZE;
+
+            if (nodes.length > 0 && oldWidth > 0 && oldHeight > 0) {
+                const scaleX = W / oldWidth;
+                const scaleY = H / oldHeight;
+                
+                const center = { x: oldWidth / 2, y: oldHeight / 2 };
+                const newCenter = { x: W / 2, y: H / 2 };
+
+                // Recalculate total node margin
+                const nodeSize = nodes[0].element ? nodes[0].element.clientWidth : 24; 
+                const margin = nodeSize / 2;
+                const nodeTotalMargin = margin + 3; // 3px is the CSS border of the .node
+
+                nodes.forEach(node => {
+                    // Proportional adaptation to resizing
+                    const relX = node.x - center.x;
+                    const relY = node.y - center.y;
+                    node.x = newCenter.x + relX * scaleX;
+                    node.y = newCenter.y + relY * scaleY;
+                    
+                    // Movement constraint (repositioning if out of bounds after resizing)
+                    const dx = node.x - newCenter.x;
+                    const dy = node.y - newCenter.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance > maxRadius) {
+                        const ratio = maxRadius / distance;
+                        node.x = newCenter.x + dx * ratio;
+                        node.y = newCenter.y + dy * ratio;
+                    }
+                    
+                    if (node.element) {
+                        node.element.style.left = `${node.x - nodeTotalMargin}px`;
+                        node.element.style.top = `${node.y - nodeTotalMargin}px`;
+                    }
+                });
+            }
+            checkIntersections();
+        }
+        
+        /**
+         * Start of drag-and-drop (mouse or touch).
+         */
+        function handleDragStart(event) {
+            event.preventDefault(); 
+            
+            const rect = container.getBoundingClientRect();
+            const clientX = event.clientX || (event.touches ? event.touches[0].clientX : 0);
+            const clientY = event.clientY || (event.touches ? event.touches[0].clientY : 0);
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+            
+            const detectionRadius = 20; 
+
+            activeNode = nodes.find(node => {
+                const dx = node.x - x;
+                const dy = node.y - y;
+                return (dx * dx + dy * dy) < (detectionRadius * detectionRadius); 
+            });
+            
+            if (activeNode) {
+                isDragging = true;
+                activeNode.element.classList.add('dragging');
+                offsetX = x - activeNode.x;
+                offsetY = y - activeNode.y;
+                checkIntersections(); // Refresh to display line highlight
+            }
+        }
+
+        /**
+         * Node movement during drag-and-drop.
+         */
+        function handleDragMove(event) {
+            if (!isDragging || !activeNode) return;
+            
+            event.preventDefault();
+            
+            const rect = container.getBoundingClientRect();
+            const clientX = event.clientX || (event.touches ? event.touches[0].clientX : 0);
+            const clientY = event.clientY || (event.touches ? event.touches[0].clientY : 0);
+            
+            let newX = clientX - rect.left - offsetX;
+            let newY = clientY - rect.top - offsetY;
+
+            // Circular boundary constraint (to stay within the game area)
+            const W = canvas.width;
+            const H = canvas.height;
+            const center = { x: W / 2, y: H / 2 };
+            
+            // Max radius: canvas size / 2 - container border size
+            const maxRadius = (Math.min(W, H) / 2) - CONTAINER_BORDER_SIZE; 
+            
+            const dx = newX - center.x;
+            const dy = newY - center.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > maxRadius) {
+                const ratio = maxRadius / distance;
+                newX = center.x + dx * ratio;
+                newY = center.y + dy * ratio;
+            }
+
+            // Recalculate total node margin
+            const margin = activeNode.element.clientWidth / 2;
+            const nodeTotalMargin = margin + 3;
+            
+            // Update DOM and logical position
+            activeNode.element.style.left = `${newX - nodeTotalMargin}px`;
+            activeNode.element.style.top = `${newY - nodeTotalMargin}px`;
+            activeNode.x = newX;
+            activeNode.y = newY;
+            
+            checkIntersections();
+        }
+
+        /**
+         * End of drag-and-drop.
+         */
+        function handleDragEnd() {
+            if (!activeNode) return;
+            
+            // Recalculate total node margin
+            const margin = activeNode.element.clientWidth / 2;
+            const nodeTotalMargin = margin + 3;
+            
+            // Ensure DOM position matches final logical position
+            activeNode.element.style.left = `${activeNode.x - nodeTotalMargin}px`;
+            activeNode.element.style.top = `${activeNode.y - nodeTotalMargin}px`;
+            
+            activeNode.element.classList.remove('dragging');
+            isDragging = false;
+            activeNode = null; // Reset active node
+            
+            checkIntersections(); // Refresh to remove highlight
+        }
+
+        // --- 6. Event Configuration ---
+
+        window.onload = function() {
+            setupLevelSelector();
+            
+            // Configure drag-and-drop events for mouse and touch
+            container.addEventListener('mousedown', handleDragStart);
+            document.addEventListener('mousemove', handleDragMove);
+            document.addEventListener('mouseup', handleDragEnd);
+            
+            container.addEventListener('touchstart', (e) => handleDragStart(e), { passive: false });
+            document.addEventListener('touchmove', (e) => handleDragMove(e), { passive: false });
+            document.addEventListener('touchend', handleDragEnd);
+            document.addEventListener('touchcancel', handleDragEnd);
+
+            newGameBtn.addEventListener('click', initGame);
+            window.addEventListener('resize', resizeCanvas);
+
+            initGame();
+        }
+        
+        // --- Firebase Globals (maintained for the environment, but not used by game logic) ---
+        // const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        // const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+    </script>
+</body>
+</html>
