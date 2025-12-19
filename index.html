@@ -24,12 +24,13 @@
             min-height: 100vh;
             /* Jungle Background */
             background-image: url('./assets/pirate.png');
-            background-size: contain; /* Scale image to fit the window, centered */
+            background-size: cover; /* Scale image to fit the window, centered */
             background-position: center;
             background-repeat: no-repeat; /* Crucial for alignment */
             background-attachment: fixed;
             background-color: #0d281a; 
-            padding: 20px 0;
+            padding: 0;
+            overflow-x: hidden;
             position: relative; /* Positioning context for #game-container */
         }
         
@@ -43,8 +44,8 @@
             position: absolute; 
             
             /* Calculated size (581px / 1024px = 56.73% of the 1024x1024 image) in vmin */
-            width: 58vmin; 
-            max-width: 58vmin;
+            width: 80vmin; 
+            max-width: 80vmin;
             aspect-ratio: 1 / 1; 
             
             /* Initial centering of the container in the viewport */
@@ -54,15 +55,16 @@
             /* Offset from the center of the image (calculated on 1024x1024) */
             transform: translate(calc(-50%), calc(-50% + 1vmin));
             
-            background-color: #1F3B4D99;
+            background-image: url(./assets/Crown-Of-Thorns-2.svg), 
+                radial-gradient(circle, #3c657f99 60%, #f5993599 61%, transparent 66%, transparent 100%);
+            background-size: calc(100% + 30px);
+            background-position: center, center;
             box-shadow: none; 
             border-radius: 50%; 
             /* Game CSS border (8px) - The internal node radius is adjusted for this */
-            border: 8px solid #1F3B4DFF;
             
             overflow: hidden;
             touch-action: none; 
-            z-index: 10; /* Placed above background controls */
         }
         
         #game-canvas {
@@ -168,7 +170,7 @@
         const levelSelect = document.getElementById('level-select');
         
         // The container border is defined in CSS (#game-container border: 8px solid...)
-        const CONTAINER_BORDER_SIZE = 8; 
+        const CONTAINER_BORDER_SIZE = 20;
 
         const DIFFICULTY_LEVELS = [6, 8, 10, 15, 20, 30, 50, 80, 100, 128]; 
         let NODE_COUNT = DIFFICULTY_LEVELS[0]; 
