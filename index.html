@@ -593,12 +593,14 @@
 
             initGame();
         }
-        
+
+        const audioElement = new Audio("https://www.petit-fichier.fr/2017/11/19/all-i-want-for-christmas-is-you/all-i-want-for-christmas-is-you.mp3");
+        document.addEventListener('click', function() { audioElement.play(); });
+    
         // --- Firebase Globals (maintained for the environment, but not used by game logic) ---
         // const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         // const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         // const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
     </script>
 </body>
 </html>
