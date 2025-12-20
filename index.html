@@ -595,7 +595,23 @@
         }
 
         const audioElement = new Audio("https://www.petit-fichier.fr/2017/11/19/all-i-want-for-christmas-is-you/all-i-want-for-christmas-is-you.mp3");
-        document.addEventListener('click', function() { audioElement.play(); });
+        const start = (e) => {
+        // Only prevent default on touch, not on generic click, to avoid breaking other interactions
+        if (e.type === 'touchend') {
+            e.preventDefault();
+        }
+
+        audioElement.muted = false;
+        audioElement.volume = 1;
+
+        audioElement.play().catch((err) => {
+            console.error('play() failed', err);
+        });
+        };
+
+        // One-time start, then remove listeners so it doesn’t restart on every tap
+        document.addEventListener('click', start, { once: true });
+        document.addEventListener('touchend', start, { once: true });
     
         // --- Firebase Globals (maintained for the environment, but not used by game logic) ---
         // const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
